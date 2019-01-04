@@ -209,9 +209,9 @@ def categoriesJSON():
 def showcategories():
     categories = session.query(Category).all()
     if 'username' not in login_session:
-        return render_template('.html', categories=categories)
+        return render_template('publicHomePage.html', categories=categories)
     else:
-        return render_template('Categories.html', categories= categories)
+        return render_template('categories.html', categories= categories)
 
 
 @app.route('/')
@@ -226,12 +226,19 @@ def categoryItems(category_id):
 @app.route('/category/<int:category_id>/new', methods=['GET', 'POST'])
 def newCategoryItem(category_id):
     category = session.query(Category).filter_by(id=category_id).one()
+    if 'username' not in login_session:
+        return redirect('/login')
+
     if request.method == 'POST':
-        newItem = Item(title = request.form['title'], Category_id = category_id)
-        session.add(newItem)
-        flash("new item created")
-        session.commit()
-        return redirect(url_for('categoryItems', category_id = category_id))
+        if request.form['title'] != "":
+            newItem = Item(title = request.form['title'], Category_id = category_id)
+            session.add(newItem)
+            flash("new item created")
+            session.commit()
+            return redirect(url_for('categoryItems', category_id = category_id))
+        else:
+            flash("cannot create item with empty title")
+            return redirect(url_for('categoryItems', category_id = category_id))
     else:
         return render_template('newCategoryItem.html', category_id=category_id)
 
@@ -239,6 +246,11 @@ def newCategoryItem(category_id):
 @app.route('/category/<int:category_id>/<int:item_id>/edit/', methods=['GET','POST'])
 def editCategoryItem(category_id, item_id):
     editItem = session.query(Item).filter_by(id=item_id).one()
+    if 'username' not in login_session:
+        return redirect('/login')
+    if editItem.User_id != login_session['user_id']:
+        return "<script>function myFunction() {alert('You are not authorized to edit this Item. Please create your own item in order to edit.');}</script><body onload='myFunction()''>"
+
     if request.method == 'POST':
         editItem.title = request.form['title']
         session.add(editItem)
@@ -254,6 +266,11 @@ def editCategoryItem(category_id, item_id):
 @app.route('/category/<int:category_id>/<int:item_id>/delete/', methods=['GET','POST'])
 def deleteCategoryItem(category_id, item_id):
     itemToDelete = session.query(Item).filter_by(id = item_id).one()
+    if 'username' not in login_session:
+        return redirect('/login')
+    if itemToDelete.User_id != login_session['user_id']:
+        return "<script>function myFunction() {alert('You are not authorized to delete this item. Please create your own item in order to delete.');}</script><body onload='myFunction()''>"
+
     if request.method == 'POST':
         session.delete(itemToDelete)
         session.commit()
