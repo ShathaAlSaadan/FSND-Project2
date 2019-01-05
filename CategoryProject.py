@@ -40,8 +40,7 @@ def gconnect():
         response.headers['Content-Type'] = 'application/json'
         return response
     # Obtain authorization code
-    request.get_data()
-    code = request.data.decode('utf-8')
+    code = request.data
 
     try:
         # Upgrade the authorization code into a credentials object
@@ -60,7 +59,6 @@ def gconnect():
            % access_token)
     h = httplib2.Http()
     result = json.loads(h.request(url, 'GET')[1])
-
     # If there was an error in the access token info, abort.
     if result.get('error') is not None:
         response = make_response(json.dumps(result.get('error')), 500)
@@ -97,7 +95,7 @@ def gconnect():
 
     # Get user info
     userinfo_url = "https://www.googleapis.com/oauth2/v1/userinfo"
-    params = {'access_token': access_token, 'alt': 'json'}
+    params = {'access_token': credentials.access_token, 'alt': 'json'}
     answer = requests.get(userinfo_url, params=params)
 
     data = answer.json()
@@ -105,11 +103,11 @@ def gconnect():
     login_session['username'] = data['name']
     login_session['picture'] = data['picture']
     login_session['email'] = data['email']
+    login_session['user_id'] = getUserID(data["email"])
+    # ADD PROVIDER TO LOGIN SESSION
+    login_session['provider'] = 'google'
 
-    user_id = getUserID(login_session['email'])
-    if not user_id:
-        user_id = createUser(login_session)
-    login_session['user_id'] = user_id
+
 
     output = ''
     output += '<h1>Welcome, '
@@ -121,6 +119,7 @@ def gconnect():
     flash("you are now logged in as %s" % login_session['username'])
     print "done!"
     return output
+
 
 def createUser(login_session):
     newUser = User(name=login_session['username'], email=login_session[
@@ -146,35 +145,25 @@ def getUserID(email):
 
 @app.route('/gdisconnect')
 def gdisconnect():
+    # Only disconnect a connected user.
     access_token = login_session.get('access_token')
     if access_token is None:
-        print 'Access Token is None'
-        response = make_response(json.dumps('Current user not connected.'), 401)
+        response = make_response(
+            json.dumps('Current user not connected.'), 401)
         response.headers['Content-Type'] = 'application/json'
         return response
-    print 'In gdisconnect access token is %s', access_token
-    print 'User name is: '
-    print login_session['username']
-    url = 'https://accounts.google.com/o/oauth2/revoke?token=%s' % login_session['access_token']
+    url = 'https://accounts.google.com/o/oauth2/revoke?token=%s' % access_token
     h = httplib2.Http()
     result = h.request(url, 'GET')[0]
-    print 'result is '
-    print result
     if result['status'] == '200':
-        del login_session['access_token']
-        del login_session['gplus_id']
-        del login_session['username']
-        del login_session['email']
-        del login_session['picture']
         response = make_response(json.dumps('Successfully disconnected.'), 200)
         response.headers['Content-Type'] = 'application/json'
-        return response
+        return render_template('publicHomePage.html')
     else:
-        response = make_response(json.dumps('Failed to revoke token for given user.', 400))
+        response = make_response(json.dumps('Failed to revoke token for given user.',
+                                    400))
         response.headers['Content-Type'] = 'application/json'
         return response
-
-
 
 @app.route('/category/<int:category_id>/JSON')
 def categoryItemJSON(category_id):
@@ -209,6 +198,7 @@ def categoriesJSON():
 def showcategories():
     categories = session.query(Category).all()
     if 'username' not in login_session:
+
         return render_template('publicHomePage.html', categories=categories)
     else:
         return render_template('categories.html', categories= categories)
@@ -221,7 +211,8 @@ def categoryItems(category_id):
     category = session.query(Category).filter_by(id=category_id).one()
 
     items = session.query(Item).filter_by(Category_id = category_id).all()
-    return render_template('category.html', category=category, item=items, categories= categories)
+    return render_template('category.html', category=category, item=items,
+                            categories= categories)
 
 @app.route('/category/<int:category_id>/new', methods=['GET', 'POST'])
 def newCategoryItem(category_id):
@@ -231,7 +222,8 @@ def newCategoryItem(category_id):
 
     if request.method == 'POST':
         if request.form['title'] != "":
-            newItem = Item(title = request.form['title'], Category_id = category_id)
+            newItem = Item(title = request.form['title'],
+                            Category_id = category_id)
             session.add(newItem)
             flash("new item created")
             session.commit()
@@ -243,7 +235,8 @@ def newCategoryItem(category_id):
         return render_template('newCategoryItem.html', category_id=category_id)
 
 
-@app.route('/category/<int:category_id>/<int:item_id>/edit/', methods=['GET','POST'])
+@app.route('/category/<int:category_id>/<int:item_id>/edit/',
+            methods=['GET','POST'])
 def editCategoryItem(category_id, item_id):
     editItem = session.query(Item).filter_by(id=item_id).one()
     if 'username' not in login_session:
@@ -258,12 +251,14 @@ def editCategoryItem(category_id, item_id):
         flash("Item has been edited")
         return redirect(url_for('categoryItems', category_id=category_id))
     else:
-        return render_template('editCatalogItem.html', category_id=category_id, item_id =item_id, item=editItem)
+        return render_template('editCatalogItem.html', category_id=category_id,
+                                item_id =item_id, item=editItem)
 
 
 
 
-@app.route('/category/<int:category_id>/<int:item_id>/delete/', methods=['GET','POST'])
+@app.route('/category/<int:category_id>/<int:item_id>/delete/',
+            methods=['GET','POST'])
 def deleteCategoryItem(category_id, item_id):
     itemToDelete = session.query(Item).filter_by(id = item_id).one()
     if 'username' not in login_session:
@@ -277,7 +272,8 @@ def deleteCategoryItem(category_id, item_id):
         flash("Item has been deleted")
         return redirect(url_for('categoryItems', category_id=category_id))
     else:
-        return render_template('deleteCategoryItem.html', category_id=category_id, item_id =item_id, item=itemToDelete)
+        return render_template('deleteCategoryItem.html', category_id=category_id,
+                                item_id =item_id, item=itemToDelete)
 
 
 if __name__ == '__main__':
